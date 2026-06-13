@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>浮上するタスク</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1a2e;
+      color: white;
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: 0.05em; }
+    header .date { font-size: 0.85rem; opacity: 0.6; }
+
+    .container { max-width: 680px; margin: 0 auto; padding: 32px 16px; }
+
+    /* ── 追加フォーム ── */
+    .add-form {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 32px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .add-form h2 { font-size: 0.9rem; color: #888; margin-bottom: 14px; letter-spacing: 0.05em; }
+
+    .form-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .add-form input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .add-form input[type="text"]:focus { border-color: #4f8ef7; }
+
+    .form-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    select, input[type="date"] {
+      padding: 8px 10px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      background: white;
+      outline: none;
+      cursor: pointer;
+    }
+    select:focus, input[type="date"]:focus { border-color: #4f8ef7; }
+
+    /* タイプ切替ピルボタン */
+    .type-toggle { display: flex; border: 1.5px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+    .type-toggle button {
+      padding: 8px 14px;
+      border: none;
+      background: white;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      color: #888;
+    }
+    .type-toggle button.active { background: #1a1a2e; color: white; }
+
+    .assignee-row { display: none; width: 100%; }
+    .assignee-row.visible { display: flex; }
+    .assignee-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .assignee-row input:focus { border-color: #4f8ef7; }
+
+    .btn-add {
+      padding: 10px 20px;
+      background: #1a1a2e;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn-add:hover { background: #2d2d4e; }
+
+    /* ── セクション見出し ── */
+    .section-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-label .count {
+      background: #e8ecf4;
+      color: #555;
+      border-radius: 99px;
+      padding: 1px 8px;
+      font-size: 0.75rem;
+    }
+
+    .group-section { margin-bottom: 20px; }
+
+    /* ── タスクカード ── */
+    .task-card {
+      background: white;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      border-left: 4px solid transparent;
+      overflow: hidden;
+      transition: box-shadow 0.15s;
+    }
+    .task-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+
+    .card-main {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    /* 左ボーダー色 */
+    .task-card.priority-high.status-todo,
+    .task-card.priority-high.status-delegating { border-left-color: #e74c3c; }
+    .task-card.priority-mid.status-todo,
+    .task-card.priority-mid.status-delegating  { border-left-color: #f39c12; }
+    .task-card.priority-low.status-todo,
+    .task-card.priority-low.status-delegating  { border-left-color: #3498db; }
+    .task-card.status-waiting                  { border-left-color: #e67e22; }
+    .task-card.status-done                     { border-left-color: #ccc; opacity: 0.5; }
+
+    /* ステータスボタン */
+    .status-btn {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      border: 2px solid #ccc;
+      background: white;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+    .status-btn:hover { border-color: #27ae60; }
+    .task-card.status-done .status-btn { background: #27ae60; border-color: #27ae60; color: white; }
+    .task-card.status-waiting .status-btn { background: #e67e22; border-color: #e67e22; color: white; font-size: 11px; }
+    .task-card.status-delegating .status-btn { background: #3498db; border-color: #3498db; color: white; font-size: 11px; }
+
+    .task-info { flex: 1; min-width: 0; }
+    .task-title {
+      font-size: 0.95rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .task-card.status-done .task-title { text-decoration: line-through; color: #aaa; }
+
+    .task-meta { display: flex; gap: 6px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
+
+    .tag {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+    .tag-high { background: #fdecea; color: #e74c3c; }
+    .tag-mid  { background: #fef3e2; color: #f39c12; }
+    .tag-low  { background: #e8f4fd; color: #3498db; }
+
+    .assignee-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.72rem;
+      background: #f0f0f0;
+      border-radius: 99px;
+      padding: 2px 8px;
+      color: #555;
+    }
+
+    .due-label { font-size: 0.75rem; color: #999; }
+    .due-label.overdue { color: #e74c3c; font-weight: 600; }
+    .due-label.today   { color: #f39c12; font-weight: 600; }
+
+    .remind-badge {
+      font-size: 0.7rem;
+      background: #fff3cd;
+      color: #856404;
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+    .carryover-badge {
+      font-size: 0.7rem;
+      background: #e8f4fd;
+      color: #2980b9;
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+
+    .expand-btn {
+      background: none;
+      border: none;
+      color: #bbb;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 4px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      transition: color 0.15s;
+    }
+    .expand-btn:hover { color: #555; }
+
+    .delete-btn {
+      background: none;
+      border: none;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px;
+      border-radius: 4px;
+      transition: color 0.2s;
+      flex-shrink: 0;
+    }
+    .delete-btn:hover { color: #e74c3c; }
+
+    /* ── 展開パネル ── */
+    .detail-panel {
+      display: none;
+      padding: 14px 16px 16px;
+      border-top: 1px solid #f0f0f0;
+      background: #fafafa;
+    }
+    .detail-panel.open { display: block; }
+
+    .notes-list { margin-bottom: 12px; }
+    .note-entry {
+      font-size: 0.82rem;
+      color: #444;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .note-date { font-size: 0.72rem; color: #bbb; margin-right: 6px; }
+    .no-notes { font-size: 0.82rem; color: #ccc; margin-bottom: 12px; }
+
+    .note-add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .note-input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      resize: none;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.4;
+    }
+    .note-input:focus { border-color: #4f8ef7; }
+
+    .btn-note {
+      padding: 8px 14px;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      white-space: nowrap;
+      align-self: flex-start;
+    }
+    .btn-note:hover { background: #e0e0e0; }
+
+    .status-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-status {
+      padding: 7px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .btn-status:hover { opacity: 0.8; }
+    .btn-confirm  { background: #27ae60; color: white; }
+    .btn-redeleg  { background: #e67e22; color: white; }
+    .btn-send     { background: #3498db; color: white; }
+    .btn-undo     { background: #95a5a6; color: white; }
+
+    /* ── アーカイブトグル ── */
+    .archive-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.82rem;
+      color: #888;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0;
+      margin-bottom: 10px;
+    }
+    .archive-toggle:hover { color: #555; }
+    #archive-list { display: none; }
+    #archive-list.open { display: block; }
+
+    .task-section { margin-bottom: 28px; }
+    .empty { text-align: center; color: #bbb; font-size: 0.9rem; padding: 20px 0; }
+    .today-empty { text-align: center; color: #bbb; font-size: 0.9rem; padding: 24px 0; margin-bottom: 28px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 浮上するタスク</h1>
+  <span class="date" id="today-label"></span>
+</header>
+
+<div class="container">
+
+  <!-- 追加フォーム -->
+  <div class="add-form">
+    <h2>＋ タスクを追加</h2>
+    <div class="form-row">
+      <input type="text" id="task-input" placeholder="タスクを入力…" />
+      <button class="btn-add" onclick="addTask()">追加</button>
+    </div>
+    <div class="form-meta">
+      <select id="priority-select">
+        <option value="high">🔴 高</option>
+        <option value="mid" selected>🟡 中</option>
+        <option value="low">🔵 低</option>
+      </select>
+      <div class="type-toggle">
+        <button id="btn-self" class="active" onclick="setType('self')">自分</button>
+        <button id="btn-delegated" onclick="setType('delegated')">委任</button>
+      </div>
+      <input type="date" id="due-input" />
+    </div>
+    <div class="form-meta assignee-row" id="assignee-row">
+      <input type="text" id="assignee-input" placeholder="委任先（例：田中さん、営業部）" />
+    </div>
+  </div>
+
+  <!-- TODAY -->
+  <div id="today-section">
+    <!-- JS で描画 -->
+  </div>
+
+  <!-- UPCOMING -->
+  <div class="section-label">
+    UPCOMING <span class="count" id="upcoming-count">0</span>
+  </div>
+  <div class="task-section" id="upcoming-list"></div>
+
+  <!-- アーカイブ -->
+  <button class="archive-toggle" onclick="toggleArchive()">
+    <span id="archive-arrow">▶</span> 完了済み <span class="count" id="archive-count">0</span>
+  </button>
+  <div id="archive-list"></div>
+
+</div>
+
+<script>
+  // ─────────────────────────────────────────────
+  //  定数・ユーティリティ
+  // ─────────────────────────────────────────────
+  function localToday() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const TODAY = localToday();
+
+  document.getElementById('today-label').textContent =
+    new Date().toLocaleDateString('ja-JP', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+  document.getElementById('due-input').value = TODAY;
+
+  function dateAddDays(dateStr, n) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function isRemindToday(task) {
+    if (!task.due) return false;
+    return task.due === dateAddDays(TODAY, 7) || task.due === dateAddDays(TODAY, 1);
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ─────────────────────────────────────────────
+  //  マイグレーション
+  // ─────────────────────────────────────────────
+  function migrateTask(t) {
+    if (t.type !== undefined) return t;
+    return {
+      ...t,
+      type: 'self',
+      status: t.done ? 'done' : 'todo',
+      assignee: '',
+      notes: [],
+    };
+  }
+
+  // ─────────────────────────────────────────────
+  //  永続化
+  // ─────────────────────────────────────────────
+  function load() {
+    const raw = JSON.parse(localStorage.getItem('surfacing-tasks') || '[]');
+    return raw.map(migrateTask);
+  }
+
+  function save(tasks) {
+    localStorage.setItem('surfacing-tasks', JSON.stringify(tasks));
+  }
+
+  function updateTask(id, patch) {
+    const tasks = load().map(t => t.id === id ? { ...t, ...patch } : t);
+    save(tasks);
+    render();
+  }
+
+  // ─────────────────────────────────────────────
+  //  フォーム操作
+  // ─────────────────────────────────────────────
+  let selectedType = 'self';
+
+  function setType(type) {
+    selectedType = type;
+    document.getElementById('btn-self').classList.toggle('active', type === 'self');
+    document.getElementById('btn-delegated').classList.toggle('active', type === 'delegated');
+    document.getElementById('assignee-row').classList.toggle('visible', type === 'delegated');
+  }
+
+  function addTask() {
+    const title = document.getElementById('task-input').value.trim();
+    if (!title) return;
+
+    const assignee = document.getElementById('assignee-input').value.trim();
+    if (selectedType === 'delegated' && !assignee) {
+      alert('委任タスクには委任先を入力してください');
+      document.getElementById('assignee-input').focus();
+      return;
+    }
+
+    const tasks = load();
+    tasks.push({
+      id: Date.now().toString(),
+      title,
+      priority: document.getElementById('priority-select').value,
+      type: selectedType,
+      assignee,
+      status: selectedType === 'self' ? 'todo' : 'delegating',
+      due: document.getElementById('due-input').value || TODAY,
+      notes: [],
+      carryover: false,
+      createdAt: TODAY,
+    });
+    save(tasks);
+    document.getElementById('task-input').value = '';
+    document.getElementById('assignee-input').value = '';
+    render();
+  }
+
+  // ─────────────────────────────────────────────
+  //  ステータス遷移
+  // ─────────────────────────────────────────────
+  function advanceStatus(id, action) {
+    const tasks = load();
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+
+    if (t.type === 'self') {
+      if (action === 'toggle') t.status = t.status === 'todo' ? 'done' : 'todo';
+    } else {
+      if (action === 'send')    t.status = 'waiting';
+      if (action === 'confirm') t.status = 'done';
+      if (action === 'undo')    t.status = 'waiting';
+    }
+    save(tasks);
+    render();
+  }
+
+  function redelegate(id) {
+    const noteEl = document.getElementById(`note-input-${id}`);
+    const text = noteEl ? noteEl.value.trim() : '';
+    if (!text) {
+      alert('再委任の理由をメモに入力してから再委任してください');
+      noteEl && noteEl.focus();
+      return;
+    }
+    const tasks = load();
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    t.notes.push({ text, date: TODAY });
+    t.status = 'delegating';
+    save(tasks);
+    render();
+  }
+
+  function addNote(id) {
+    const noteEl = document.getElementById(`note-input-${id}`);
+    const text = noteEl ? noteEl.value.trim() : '';
+    if (!text) return;
+    const tasks = load();
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    t.notes.push({ text, date: TODAY });
+    save(tasks);
+    const panel = document.getElementById(`panel-${id}`);
+    if (panel) {
+      const openState = panel.classList.contains('open');
+      render();
+      const newPanel = document.getElementById(`panel-${id}`);
+      if (newPanel && openState) newPanel.classList.add('open');
+    } else {
+      render();
+    }
+  }
+
+  function deleteTask(id) {
+    save(load().filter(t => t.id !== id));
+    render();
+  }
+
+  // ─────────────────────────────────────────────
+  //  カードHTML生成
+  // ─────────────────────────────────────────────
+  function dueLabelHtml(due) {
+    if (!due) return '';
+    if (due < TODAY) return `<span class="due-label overdue">期限切れ</span>`;
+    if (due === TODAY) return `<span class="due-label today">今日まで</span>`;
+    const d = new Date(due + 'T00:00:00');
+    const text = d.toLocaleDateString('ja-JP', { month:'short', day:'numeric' });
+    return `<span class="due-label">${text}</span>`;
+  }
+
+  function statusBtnHtml(t) {
+    if (t.type === 'self') {
+      const icon = t.status === 'done' ? '✓' : '';
+      return `<button class="status-btn" onclick="event.stopPropagation();advanceStatus('${t.id}','toggle')" title="完了切替">${icon}</button>`;
+    }
+    const icons = { delegating: '📤', waiting: '⏳', done: '✓' };
+    return `<button class="status-btn" onclick="event.stopPropagation()" title="${t.status}">${icons[t.status]||''}</button>`;
+  }
+
+  function statusActionsHtml(t) {
+    if (t.type === 'self') return '';
+    if (t.status === 'delegating') {
+      return `<div class="status-actions">
+        <button class="btn-status btn-send" onclick="advanceStatus('${t.id}','send')">送信済み・返答待ち</button>
+      </div>`;
+    }
+    if (t.status === 'waiting') {
+      return `<div class="status-actions">
+        <button class="btn-status btn-confirm" onclick="advanceStatus('${t.id}','confirm')">完了確認</button>
+        <button class="btn-status btn-redeleg" onclick="redelegate('${t.id}')">再委任（メモ必須）</button>
+      </div>`;
+    }
+    if (t.status === 'done') {
+      return `<div class="status-actions">
+        <button class="btn-status btn-undo" onclick="advanceStatus('${t.id}','undo')">完了を取り消す</button>
+      </div>`;
+    }
+    return '';
+  }
+
+  function taskCard(t) {
+    const prioLabel = { high:'高', mid:'中', low:'低' };
+    const remind = isRemindToday(t) && t.status !== 'done';
+    const carry  = t.carryover;
+
+    const notesHtml = t.notes.length
+      ? t.notes.map(n => `<div class="note-entry"><span class="note-date">${n.date}</span>${escHtml(n.text)}</div>`).join('')
+      : '<div class="no-notes">メモなし</div>';
+
+    const assigneeChip = (t.type === 'delegated' && t.assignee)
+      ? `<span class="assignee-chip">👤 ${escHtml(t.assignee)}</span>` : '';
+
+    return `
+<div class="task-card priority-${t.priority} status-${t.status}" id="card-${t.id}">
+  <div class="card-main" onclick="togglePanel('${t.id}')">
+    ${statusBtnHtml(t)}
+    <div class="task-info">
+      <div class="task-title">${escHtml(t.title)}</div>
+      <div class="task-meta">
+        <span class="tag tag-${t.priority}">${prioLabel[t.priority]}</span>
+        ${assigneeChip}
+        ${dueLabelHtml(t.due)}
+        ${remind ? '<span class="remind-badge">🔔 リマインド</span>' : ''}
+        ${carry  ? '<span class="carryover-badge">繰り越し</span>' : ''}
+      </div>
+    </div>
+    <button class="expand-btn" onclick="event.stopPropagation();togglePanel('${t.id}')">▼</button>
+    <button class="delete-btn" onclick="event.stopPropagation();deleteTask('${t.id}')">✕</button>
+  </div>
+  <div class="detail-panel" id="panel-${t.id}">
+    <div class="notes-list">${notesHtml}</div>
+    <div class="note-add-row">
+      <textarea class="note-input" id="note-input-${t.id}" rows="2" placeholder="メモを入力…"></textarea>
+      <button class="btn-note" onclick="addNote('${t.id}')">追加</button>
+    </div>
+    ${statusActionsHtml(t)}
+  </div>
+</div>`;
+  }
+
+  function togglePanel(id) {
+    const panel = document.getElementById(`panel-${id}`);
+    if (panel) panel.classList.toggle('open');
+  }
+
+  // ─────────────────────────────────────────────
+  //  キャリーオーバー
+  // ─────────────────────────────────────────────
+  function applyCarryover(tasks) {
+    return tasks.map(t => {
+      if (t.status !== 'done' && t.due && t.due < TODAY) {
+        return { ...t, carryover: true, due: TODAY };
+      }
+      return t;
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  //  グループ分け
+  // ─────────────────────────────────────────────
+  function getTodayGroups(tasks) {
+    const remind = [], waiting = [], action = [];
+    for (const t of tasks) {
+      if (t.status === 'done') continue;
+      if (!t.due || t.due > TODAY) continue; // UPCOMING に回す
+      if (isRemindToday(t))                          { remind.push(t);  continue; }
+      if (t.type === 'delegated' && t.status === 'waiting') { waiting.push(t); continue; }
+      action.push(t);
+    }
+    return { remind, waiting, action };
+  }
+
+  // ─────────────────────────────────────────────
+  //  描画
+  // ─────────────────────────────────────────────
+  const prioOrder = { high: 0, mid: 1, low: 2 };
+  const byPrio = (a, b) => prioOrder[a.priority] - prioOrder[b.priority];
+
+  function renderGroup(label, tasks) {
+    if (!tasks.length) return '';
+    return `<div class="group-section">
+      <div class="section-label">${label} <span class="count">${tasks.length}</span></div>
+      ${tasks.sort(byPrio).map(taskCard).join('')}
+    </div>`;
+  }
+
+  function render() {
+    let tasks = applyCarryover(load());
+    save(tasks);
+
+    const { remind, waiting, action } = getTodayGroups(tasks);
+    const todayTotal = remind.length + waiting.length + action.length;
+
+    const upcoming = tasks.filter(t => t.status !== 'done' && t.due && t.due > TODAY)
+      .sort((a, b) => a.due.localeCompare(b.due));
+    const done = tasks.filter(t => t.status === 'done').reverse();
+
+    const todayEl = document.getElementById('today-section');
+    if (todayTotal === 0) {
+      todayEl.innerHTML = `
+        <div class="section-label">TODAY <span class="count">0</span></div>
+        <div class="today-empty">今日のタスクはありません ✨</div>`;
+    } else {
+      todayEl.innerHTML = `
+        <div class="section-label">TODAY <span class="count">${todayTotal}</span></div>
+        ${renderGroup('🔔 リマインド', remind)}
+        ${renderGroup('🔴 返答待ち', waiting)}
+        ${renderGroup('🟡 自分のアクション', action)}`;
+    }
+
+    document.getElementById('upcoming-list').innerHTML =
+      upcoming.length ? upcoming.map(taskCard).join('') : '<div class="empty">予定タスクはありません</div>';
+    document.getElementById('upcoming-count').textContent = upcoming.length;
+
+    document.getElementById('archive-list').innerHTML =
+      done.length ? done.map(taskCard).join('') : '<div class="empty">完了タスクはありません</div>';
+    document.getElementById('archive-count').textContent = done.length;
+  }
+
+  function toggleArchive() {
+    const el = document.getElementById('archive-list');
+    const arrow = document.getElementById('archive-arrow');
+    el.classList.toggle('open');
+    arrow.textContent = el.classList.contains('open') ? '▼' : '▶';
+  }
+
+
+  let lastKeyWasEnter = false;
+  document.getElementById('task-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      if (lastKeyWasEnter) {
+        addTask();
+        lastKeyWasEnter = false;
+      } else {
+        lastKeyWasEnter = true;
+      }
+    } else {
+      lastKeyWasEnter = false;
+    }
+  });
+
+  render();
+</script>
+</body>
+</html>
